@@ -21,7 +21,9 @@ project02/03 within the team ONLY.
 ***Project description:*** As illustrated by the below two images, the objective of this project is to
 implement a Laplacian blob detector.
 
-An input image A blob detection result
+![input](/inputImage.jpg)    ![Blob](/blobDetection.jpg)
+
+An input image  /  A blob detection result
 
 ### Algorithm outline:
 * Generate a Laplacian of Gaussian filter.
