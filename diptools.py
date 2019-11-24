@@ -1,4 +1,4 @@
-# Project 04 Digital Imaging Processing
+ # Project 04 Digital Imaging Processing
 # Authors:
 #   * Daniel Mendez (dmendez@ncsu.edu)
 #   * Jaqueline
@@ -12,6 +12,8 @@ import numpy as np
 import cv2 as cv
 import pyfftw # FFT library
 import pdb
+import time
+import math
 
  # Padding type
 class Pad(Enum):
@@ -362,19 +364,255 @@ def IDFT2(F):
 
     return Fx*(1/(F.shape[0]*F.shape[1]))
 
+# Pyramid blending Function
+# Arguments
+# input_image - input image gray or RGB
+# num_layers - number of layers of the pyramid
+# Output
+# gPyr - Gaussian Pyramid
+# lPyr - Lapalacian Pyramid
+# pyramid - select pyramids to compute: both, gaussian, laplacian
+def ComputePyr(input_image, num_layers, pyramid='both'):
+
+    img_height = input_image.shape[0]
+    img_width = input_image.shape[1]
+    [gPyr, lPyr] = [None,None]
+
+    # num_layers must be positive
+    if num_layers < 1:
+        raise TypeError("Argument 'num_layers' must be a positive integer")
+        exit()
+
+    # check if num_layers is feasable
+    # num of layers is inclusive, i.e. counting the original image
+    h,w = [img_height, img_width]
+    for i in range(1,num_layers-1):
+        h,w = [int(h/2), int(w/2)]
+        if h==1 or w==1:
+            num_layers = i+1
+            print('Warning: Maximum number of layers is: '+str(num_layers))
+            break # exit for loop
+
+    # Gaussian pyramid alwas has to be computed
+    # generate Gaussian pyramid
+    print("  Gaussian layer 1")
+    gImg = input_image.copy()
+    gPyr = [gImg] # first  element
+    for i in range(num_layers-1):
+        # gImg = cv.pyrDown(gImg)
+        scale = (i+1)**2
+        gImg = downSample(gImg, [int(gImg.shape[0]/2),int(gImg.shape[1]/2)], scale)
+        print("  Gaussian layer " + str(i+2))
+        gPyr.append(gImg)
+
+    if pyramid=='both' or pyramid=='laplacian': # pyramid=='gaussian':
+        #generate Laplacian Pyramid
+        print("  Lapacian layer " + str(num_layers))
+        lPyr = [gPyr[-1]] # assign first element as the last element of gauss_pyramid
+        for i in range(num_layers-1, 0, -1): # for loop i reverse count
+            scale = (i)**2
+            gExt = upSample(gPyr[i], [gPyr[i-1].shape[0],gPyr[i-1].shape[1]], scale)
+            print("  Lapacian layer " + str(i))
+            lvl = cv.subtract(gPyr[i-1], gExt) # compute laplacian pyramid level
+            lPyr.append(lvl)
+
+    gPyr.reverse()
+    return [gPyr, lPyr] # return list
+
+
+
+# Nearest Neighbor Interpolation
+# A - np.array image
+# new_size - list [height,width]
+def nn_interpolate(A, new_size):
+    old_size = A.shape
+    row_ratio, col_ratio = np.array(new_size)/np.array(old_size)
+
+    # row wise interpolation
+    row_idx = (np.ceil(range(1, 1 + int(old_size[0]*row_ratio))/row_ratio) - 1).astype(int)
+
+    # column wise interpolation
+    col_idx = (np.ceil(range(1, 1 + int(old_size[1]*col_ratio))/col_ratio) - 1).astype(int)
+
+    final_matrix = A[:, col_idx][row_idx, :] #modified
+
+    return final_matrix
+
+
+
+# Upsample
+# img - np image array
+# new_size - size [height, width] of the output image
+# scale - downscale or upscale as a power of 2: 2,4,6...
+def upSample(img, new_size, scale):
+    up_img = np.empty((new_size[0],new_size[1], img.shape[2]),img.dtype) # create temporal image
+
+    # Upsample image
+    for c in range(img.shape[2]): # channel
+        up_img[:,:,c] = nn_interpolate(img[:,:,c],new_size)
+
+    # Smooth image
+    # g_vec = GaussianVector2(scale)
+    g_vec = GaussianVector((up_img.shape[0],up_img.shape[1]), 2)
+    fltrd_part =  conv2(up_img, g_vec,  Pad.REFLECT_ACROSS_EDGE )
+    fltrd_img =  conv2(fltrd_part, g_vec.transpose(),  Pad.REFLECT_ACROSS_EDGE )
+
+    return fltrd_img.astype(img.dtype)  # convert to np.uint image
+
+
+
+# Downsample
+# img - np image array
+# new_size - size [height, width] of the output image
+# scale - downscale or upscale as a power of 2: 2,4,6...
+def downSample(img, new_size, scale):
+    down_img = np.empty((new_size[0],new_size[1], img.shape[2]),img.dtype) # create temporal image
+
+    # Smooth image
+    g_vec = GaussianVector((img.shape[0],img.shape[1]), 2)
+    fltrd_part =  conv2(img, g_vec,  Pad.REFLECT_ACROSS_EDGE )
+    fltrd_img =  conv2(fltrd_part, g_vec.transpose(),  Pad.REFLECT_ACROSS_EDGE )
+
+    fltrd_img.astype(img.dtype)  # convert to np.uint image
+
+    # Downsample image
+    for c in range(img.shape[2]): # channel
+        down_img[:,:,c] = nn_interpolate(fltrd_img[:,:,c],new_size)
+
+    return down_img
+
+
+
+# Gaussian Vector
+# MN - image size  M rows, N columns
+# perc - image percentage wrt dir 0-100
+# dir - direction to get the percentage
+def GaussianVector(MN, perc, dir = 'width'):
+    # arguments checks
+    if dir != 'height' or dir != 'width':
+        dir = 'width' # defualt direction
+
+    if perc < 0:
+        perc = 0
+    elif perc > 100:
+        perc = 100
+
+    if len(MN)<2:
+        raise TypeError("Argument 'mn' in GaussianVector must have 2 elements")
+        exit()
+    M, N = MN # separate values
+
+    # determine kernel size
+    if dir == 'width':
+        ksize = int(N*perc/100)
+    else: # dir = height
+        ksize = int(M*perc/100)
+
+    # ensure odd ksize
+    if not ksize%2: # is ksize even?
+        ksize += 1 # make it odd
+
+    # smallest possible kernel
+    if ksize < 3:
+        ksize = 3
+
+    # determine sigma value
+    sigma = 2*ksize/6 # heristics for sigma value
+
+    # smallest possible sigma
+    if sigma < 1:
+        sigma = 1
+    print('   sigma: ' + str(sigma) + ' ksize: ' + str(ksize))
+
+    return cv.getGaussianKernel(ksize,sigma)
+
+
+# pyramidBlending Function
+def pyramidBlending():
+    # define number of layers
+    layers = 3
+
+    print("PYRAMID BLENDING\n")
+
+    # Align GUI
+    # alg.launch()
+    # Mask GUI
+    # can.launch()
+    # Give some time to finish saving file
+    time.sleep(1)
+
+    # default file names
+    source = 'foreground.jpg'
+    target = 'background.jpg'
+    mask = 'mask.jpg'
+
+    #  Source and Target
+    S = cv.imread(source)
+    T = cv.imread(target)
+    M = cv.imread(mask)
+
+    # Start time counter
+    start_time = time.time()
+
+    print('Computing S pyramids...')
+    gpS, lpS = ComputePyr(S, layers)
+    print('Computing T pyramids...')
+    gpT, lpT = ComputePyr(T, layers)
+    print('Computing M pyramids...')
+    gpM, lpM = ComputePyr(M, layers, pyramid='gaussian')
+
+    # Lapacian pyramid for composite
+    lpC = []
+    for ls,lt,g  in zip(lpS,lpT,gpM):
+        lpC_i = np.empty(g.shape,g.dtype) # create temporal image
+        for c in range(g.shape[2]): # channel
+            gs = (g[:,:,c]/255).astype(np.double) # normalized mask
+            # Iterate through pixels
+            for y in range(g.shape[0]): #y coordinate
+                for x in range(g.shape[1]): # x coordinate
+                    # Laplacian pyramid for composite formula
+                    # pdb.set_trace()
+                    lpC_i[y][x][c] = gs[y][x]*ls[y][x][c] + (1-gs[y][x])*lt[y][x][c]
+                    # ensure range TODO
+        lpC.append(lpC_i) # add element to pyramid
+        # pdb.set_trace()
+
+    # Recontruct image from Laplacian for composite pyramid
+    blend_img = lpC[0] #.astype(np.uint8)
+    for i in range(1,layers):
+        print("Blending layer " + str(i) + ' ...')
+        scale = i**2
+        blend_img = upSample(blend_img, [lpC[i].shape[0],lpC[i].shape[1]], scale )
+        blend_img = cv.add(blend_img, lpC[i]) # add up :)
+
+    # Display and save result
+    cv.imshow('Blending',blend_img)
+    print('Done!' + str(time.time()-start_time) + 'sec')
+    cv.waitKey()
+    cv.imwrite('./blending.png',blend_img)
+    cv.destroyAllWindows()
 
 
 
 # main function
 def main():
     # Print module information
-    print('''Module diptools.py
+    print('''\n
+    ____________________________________________________________________________
+                                    diptools.py
     Functions in this module:
     - conv2(f,w,pad)
     - scaleImageChannel(g,K,data_type)
     - padding(img, pad, mn=(1,1))
     - DFT2(f)
     - IDFT2(F)
+    - ComputePyr(input_image, num_layers, pyramid='both')
+    - nn_interpolate(A, new_size)
+    - upSample(img, new_size, scale)
+    - downSample(img, new_size, scale)
+    - GaussianVector(MN, perc, dir = 'width')
+    - pyramidBlending()
+
     Enumerations in this module:
     - Pad(Enum)
         CLIP_ZERO
@@ -392,6 +630,8 @@ def main():
         SOBEL_Y
         ROBERTS_X
         ROBERTS_Y
+        LAPLACIAN_1
+        LAPLACIAN_2
         ''')
 
 # Call main function
