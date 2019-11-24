@@ -80,7 +80,7 @@ cv.destroyAllWindows()
 
 
 
-# print("\n DFT TIMING: fftw VS np \n")
+# print("\n DFT TIMING: fftw VS numpy \n")
 # # Generate some data
 # a = pyfftw.empty_aligned((1280, 640), dtype='complex128')
 # ar, ai = np.random.randn(2, 1280, 640)
