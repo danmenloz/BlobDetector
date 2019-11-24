@@ -305,8 +305,8 @@ def padding(img, pad, mn=(1,1) ):
 
 # Fast Fourier Transform 2D
 # f - Grayscale input image
-def DFT2(f):
-    # Initialize input and outpu vectors
+def DFT2_PYFFTW(f):
+    # Initialize input and output vectors
     a = pyfftw.empty_aligned(f.shape[1], dtype='complex128')
     b = pyfftw.empty_aligned(f.shape[1], dtype='complex128')
 
@@ -321,7 +321,7 @@ def DFT2(f):
             a[x] = f[y][x] # copy row in 'a' array
         Fxv[y,:] = fft_row() # perfrom FFT and store it in array 'Fxv'
 
-    # Initialize input and outpu vectors
+    # Initialize input and output vectors
     c = pyfftw.empty_aligned(f.shape[0], dtype='complex128')
     d = pyfftw.empty_aligned(f.shape[0], dtype='complex128')
 
@@ -341,7 +341,7 @@ def DFT2(f):
 
 # Inverse Fast Fourier Transform 2D
 # F - input Grayscale image
-def IDFT2(F):
+def IDFT2__PYFFTW(F):
     # Create emtpy matrix to store the 2D IDFT
     Fu = np.empty((F.shape[0],F.shape[1]), dtype='complex128')
 
@@ -363,6 +363,41 @@ def IDFT2(F):
             Fx[y][x] = im + 1j*re
 
     return Fx*(1/(F.shape[0]*F.shape[1]))
+
+
+
+
+# Fast Fourier Transform 2D
+# f - Grayscale input image
+def DFT2(f):
+    f = np.array(f)
+    # FFT in Rows
+    row_f = np.fft.fft(f)
+    # FFT in Columns
+    row_f = np.transpose(row_f)
+    col_f = np.fft.fft(row_f)
+    dft_2 = np.transpose(col_f)
+    return dft_2
+
+
+
+
+# Inverse Fast Fourier Transform 2D
+# F - input Grayscale image
+def IDFT2(f):
+    f = np.array(f)
+    # Calculating input matrix size
+    size_x = f.shape[0]
+    size_y = f.shape[1]
+    # Conjugate input matrix
+    conj_f = np.conj(f)
+    # Calculating inverse fft
+    idft_2 = 1/(size_x*size_y)*DFT2(conj_f)
+    # return idft_2.real
+    return idft_2
+
+
+
 
 # Pyramid blending Function
 # Arguments
@@ -599,7 +634,7 @@ def main():
     # Print module information
     print('''\n
     ____________________________________________________________________________
-                                    diptools.py
+                                diptools.py
     Functions in this module:
     - conv2(f,w,pad)
     - scaleImageChannel(g,K,data_type)
