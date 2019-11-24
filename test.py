@@ -2,6 +2,8 @@ import diptools as dip
 import numpy as np
 import cv2 as cv
 import pdb
+import pyfftw # FFT library
+import time
 
 # README:
 # Instructions
@@ -28,16 +30,37 @@ import pdb
 
 
 
-print("\n FORWARD AND INVERSE DISCRETE FOURIER TRANSFORM \n")
-img_file = './Images/lena.png'
-img = cv.imread(img_file,cv.IMREAD_GRAYSCALE)
-Fimg = dip.DFT2(img) # Fourier transform
-fimg_c = dip.IDFT2(Fimg) # Inverse Fourier transform
-fimg = fimg_c.astype(np.uint8) # Real part only and convert to uint
-error = (img-fimg).astype(np.uint8) # compute error
-print('Max error: ' + str(np.max(error)))
-cv.imshow('Original Image',img)
-cv.imshow('IDFT2 Result',fimg)
-cv.imshow('IDFT2 Check',error)
-cv.waitKey()
-cv.destroyAllWindows()
+# print("\n FORWARD AND INVERSE DISCRETE FOURIER TRANSFORM \n")
+# start_time = time.time()
+# img_file = './Images/lena.png'
+# img = cv.imread(img_file,cv.IMREAD_GRAYSCALE)
+# Fimg = dip.DFT2(img) # Fourier transform
+# fimg_c = dip.IDFT2(Fimg) # Inverse Fourier transform
+# fimg = fimg_c.astype(np.uint8) # Real part only and convert to uint
+# error = (img-fimg).astype(np.uint8) # compute error
+# print("    time(s): " + str(time.time()-start_time))
+# print('Max error: ' + str(np.max(error)))
+# cv.imshow('Original Image',img)
+# cv.imshow('IDFT2 Result',fimg)
+# cv.imshow('IDFT2 Check',error)
+# cv.waitKey()
+# cv.destroyAllWindows()
+
+
+
+
+print("\n DFT TIMING: fftw VS np \n")
+# Generate some data
+a = pyfftw.empty_aligned((1280, 640), dtype='complex128')
+ar, ai = np.random.randn(2, 1280, 640)
+a[:] = ar + 1j*ai
+# fftw DFT computation
+start_time = time.time()
+fft_object = pyfftw.builders.fft(a)
+b = fft_object()
+print("    fftw time(s): " + str(time.time()-start_time))
+# numpy DFT computation
+start_time = time.time()
+c = np.fft.fft(a)
+print("    numpy time(s): " + str(time.time()-start_time))
+print(len(a))
