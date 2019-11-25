@@ -29,66 +29,68 @@ print("img_cropped: " + str(img_cropped.shape))
 
 # Step 3
 # multiply by (-1)^(x+y)
-img_shifted = np.empty((P,Q), np.int8)
+img_shifted = np.empty((P,Q), np.int)
 for y in range(P):
     for x in range(Q):
         img_shifted[y][x] = img_cropped[y][x] * (-1)**(x+y)
+print("img_shifted min,max: " + str(np.min(img_shifted)) + ", " + str(np.max(img_shifted)))
 [hmag, hphase] = dip.freqz(img_shifted, normalized=True, centered=False)
 
 # Step 4
 # Compute DFT
-# Fimg = np.empty((P,Q,3), dtype=complex)
-# for ch in range(nchls):
-#     Fimg[:,:,ch] = dip.DFT2(img_shifted[:,:,ch]) # Fourier transform
-#     print("Fimg min,max: " + str(np.min(Fimg[:,:,ch])) + ", " + str(np.max(Fimg[:,:,ch])))
+Fimg = np.empty((P,Q), dtype=complex)
+Fimg= dip.DFT2(img_shifted) # Fourier transform
+print("Fimg min,max: " + str(np.min(Fimg)) + ", " + str(np.max(Fimg)))
 
-# # Step 5
-# # real-symmetric transfer funtion H(u,v) of size PxQ centerd at (P/2,Q,2)
-# sigma = 2 # try different values
-# ksize = max(P, Q)
-# # pdb.set_trace()
+# Step 5
+# real-symmetric transfer funtion H(u,v) of size PxQ centerd at (P/2,Q,2)
+sigma = 10 # try different values
+ksize = max(P, Q)
+# pdb.set_trace()
 # G = cv.getGaussianKernel(ksize,sigma)
 # H = np.multiply(G,np.transpose(G))
-# # pdb.set_trace()
-# if Q>P:
-#     ha = int((Q-P)/2)
-#     H = H[ha:ha+P,:]
-# elif Q<P:
-#     hb = int((P-Q)/2)
-#     H = H[:,hb:hb+Q]
-#     H = np.asarray(H, dtype=np.double)
-# print("H Kernel: " + str(H.shape))
-# # pdb.set_trace()
-# print("H min,max: " + str(np.min(H)) + ", " + str(np.max(H)) )
-#
-# # Step 6
-# # H(u,v)*F(u,v)
-# Gimg = np.empty((P,Q,3), dtype=complex)
-# for ch in range(nchls):
-#     Gimg[:,:,ch] = np.multiply(Fimg[:,:,ch], H)
-#     print("Gimg min,max: " + str(np.min(Gimg[:,:,ch])) + ", " + str(np.max(Gimg[:,:,ch])))
-# print("Gimg: " + str(Gimg.shape))
-#
-# # Step 7
-# # Filtered image through iDFT
-# gimg = np.empty((P,Q,3), np.double)
-# g_padded = np.empty((P,Q,3), np.int8)
-# for ch in range(nchls):
-#     gimg[:,:,ch] = (dip.IDFT2(Gimg[:,:,ch])).real
-#     print("gimg min,max: " + str(np.min(gimg[:,:,ch])) + ", " + str(np.max(gimg[:,:,ch])))
-#
-# for ch in range(nchls):
-#     for y in range(P):
-#         for x in range(Q):
-#             g_padded[y,x,ch] = (gimg[y,x,ch] * (-1)**(x+y)).astype(np.int8)
-#     print("g_padded min,max: " + str(np.min(g_padded[:,:,ch])) + ", " + str(np.max(g_padded[:,:,ch])))
-# print("gimg: " + str(g_padded.shape))
+H = np.ones((ksize,ksize))
+# pdb.set_trace()
+if Q>P:
+    ha = int((Q-P)/2)
+    H = H[ha:ha+P,:]
+elif Q<P:
+    hb = int((P-Q)/2)
+    H = H[:,hb:hb+Q]
+    H = np.asarray(H, dtype=np.double)
+print("H Kernel: " + str(H.shape))
+# pdb.set_trace()
+print("H min,max: " + str(np.min(H)) + ", " + str(np.max(H)) )
+
+# Step 6
+# H(u,v)*F(u,v)
+Gimg = np.empty((P,Q), dtype=complex)
+Gimg = np.multiply(Fimg, H)
+print("Gimg min,max: " + str(np.min(Gimg)) + ", " + str(np.max(Gimg)))
+print("Gimg: " + str(Gimg.shape))
+
+# Step 7
+# Filtered image through iDFT
+gimg = np.empty((P,Q), np.double)
+g_padded = np.empty((P,Q), np.double)
+gimg= (dip.IDFT2(Fimg)).real # changed Gimg for Fimg to test
+print("gimg min,max: " + str(np.min(gimg)) + ", " + str(np.max(gimg)))
+[hmag1, hphase1] = dip.freqz(gimg, normalized=True, centered=False)
+
+for y in range(P):
+    for x in range(Q):
+        g_padded[y][x] = gimg[y][x] * (-1)**(x+y)   #).astype(np.int8)
+print("g_padded min,max: " + str(np.min(g_padded)) + ", " + str(np.max(g_padded)))
+print("gimg: " + str(g_padded.shape))
 
 
 cv.imshow('1 Original', img)
 cv.imshow('2 Padding',img_cropped)
 cv.imshow('3 Shifted', dip.scaleImage(img_shifted, crop=True))
-# cv.imshow('Gpadded',dip.scaleImage(g_padded, modo = 'custom', K = 255))
-cv.imshow('Mag Spectrum img_shifted', hmag)
+cv.imshow('4 Mag Spectrum img_shifted', hmag)
+cv.imshow('5 Gaussian Filter', dip.scaleImage(H,modo='custom',K=255))
+cv.imshow('6 Mag Spectrum H*F', hmag1)
+cv.imshow('7 g padded', dip.scaleImage(g_padded,modo='custom',K=255))
+print('Done!')
 cv.waitKey()
 cv.destroyAllWindows()

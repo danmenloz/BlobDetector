@@ -210,7 +210,7 @@ def scaleImage(img, modo = 'auto', K = 255, crop=False,):
 def scaleImageChannel(g,K,data_type):
     # see page 91 of DIP book for reference
     min_g = g.min()
-    g_aux = g.astype(int) # copy of g as int to avoid overflow
+    g_aux = g.astype(np.float32) # copy of g as float to avoid overflow
 
     # ensure K max value for 8 bits
     if K > 255:
@@ -584,7 +584,7 @@ def GaussianVector(MN, perc, dir = 'width'):
 # centered - magnitude spectrum centered? For display only
 def freqz(f, normalized=True, centered=True):
     if normalized:
-        img_scld = scaleImageChannel(f,1,np.float32) # scale image to range [0,1]
+        img_scld = scaleImageChannel(f,1,np.float64) # scale image to range [0,1]
     else:
         img_scld = np.copy(f)
     F = DFT2(img_scld) # compute DFT2
