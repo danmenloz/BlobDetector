@@ -563,7 +563,7 @@ def GaussianVector(MN, perc, dir = 'width'):
 
 
 # Frequency Response
-# Plots the Magnitude and Phase response of an image
+# Images of the Magnitude and Phase response ready to show with cv.imshow
 # f - image (1 cahnnel only)
 # normalized - image is normalized to 1 previous DFT
 # centered - magnitude spectrum centered? For display only
