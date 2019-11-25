@@ -562,6 +562,31 @@ def GaussianVector(MN, perc, dir = 'width'):
     return cv.getGaussianKernel(ksize,sigma)
 
 
+# Frequency Response
+# Plots the Magnitude and Phase response of an image
+# f - image (1 cahnnel only)
+# normalized - image is normalized to 1 previous DFT
+# centered - magnitude spectrum centered? For display only
+def freqz(f, normalized=True, centered=True):
+    if normalized:
+        img_scld = scaleImageChannel(f,1,np.float32) # scale image to range [0,1]
+    else:
+        img_scld = np.copy(f)
+    F = DFT2(img_scld) # compute DFT2
+    if centered:
+        F_shift = np.fft.fftshift(F)
+    else:
+        F_shift = np.copy(F)
+    log_T = 1+np.abs(F_shift) # apply log tranformation just for visualization
+    magnitude_spectrum = np.log(log_T)
+    magnitude_spectrum = scaleImageChannel(magnitude_spectrum,255,np.uint8)
+    phase_angle = np.angle(F_shift)
+    phase_angle = scaleImageChannel(phase_angle,255,np.uint8)
+    return [magnitude_spectrum, phase_angle]
+
+
+
+
 # pyramidBlending Function
 def pyramidBlending():
     # define number of layers
