@@ -157,13 +157,27 @@ def conv2(f,w,pad):
 
 
 # Scale Image for display
-def scaleImage(img, modo = 'auto', K = 255):
+def scaleImage(img, modo = 'auto', K = 255, crop=False,):
     # Check image channels
     if len(img.shape)>2:
         # It is a color image
         img_channels = img.shape[2] #channels
     else:
         img_channels = 0
+
+    if crop:
+        # negative values are cropped to 0
+        if img_channels>0:
+            for ch in range(img_channels):
+                for y in range(img.shape[0]): #y coordinate
+                    for x in range(img.shape[1]): # x coordinate
+                        if img[y][x][ch] < 0:
+                            img[y][x][ch] = 0
+        else:
+            for y in range(img.shape[0]): #y coordinate
+            	for x in range(img.shape[1]): # x coordinate
+                    if img[y][x] < 0:
+                        img[y][x] = 0
 
     if modo == 'auto':
         # Scale image in range [0-img.max()]  modo Auto
@@ -174,7 +188,7 @@ def scaleImage(img, modo = 'auto', K = 255):
         else:
             img_scld = scaleImageChannel(img,int(img.max()),np.uint8)
     elif modo == 'custom':
-        # Scale image in range [0-img.max()]  modo Auto
+        # Scale image in range [0-K]  modo Auto
         if img_channels>0:
             img_scld = np.zeros((img.shape[0],img.shape[1],img_channels),np.uint8)
             for ch in range(img_channels):
@@ -196,6 +210,7 @@ def scaleImage(img, modo = 'auto', K = 255):
 def scaleImageChannel(g,K,data_type):
     # see page 91 of DIP book for reference
     min_g = g.min()
+    g_aux = g.astype(int) # copy of g as int to avoid overflow
 
     # ensure K max value for 8 bits
     if K > 255:
@@ -203,14 +218,14 @@ def scaleImageChannel(g,K,data_type):
 
     for y in range(g.shape[0]): #y coordinate
     	for x in range(g.shape[1]): # x coordinate
-            g[y][x] -= min_g
+            g_aux[y][x] -= min_g
 
     g_s = np.empty((g.shape[0],g.shape[1]),data_type)
-    max_g = g.max()
+    max_g = g_aux.max()
 
     for y in range(g_s.shape[0]): #y coordinate
     	for x in range(g_s.shape[1]): # x coordinate
-            g_s[y][x] = data_type(K*(g[y][x]/max_g))
+            g_s[y][x] = data_type(K*(g_aux[y][x]/max_g))
 
     return g_s
 
@@ -579,9 +594,9 @@ def freqz(f, normalized=True, centered=True):
         F_shift = np.copy(F)
     log_T = 1+np.abs(F_shift) # apply log tranformation just for visualization
     magnitude_spectrum = np.log(log_T)
-    magnitude_spectrum = scaleImageChannel(magnitude_spectrum,255,np.uint8)
+    magnitude_spectrum = scaleImage(magnitude_spectrum,modo='custom',K=255)
     phase_angle = np.angle(F_shift)
-    phase_angle = scaleImageChannel(phase_angle,255,np.uint8)
+    phase_angle = scaleImage(phase_angle,modo='custom',K=255)
     return [magnitude_spectrum, phase_angle]
 
 

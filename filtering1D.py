@@ -8,11 +8,10 @@ import pyfftw # FFT library
 import time
 
 
-img_file = './Images/sunflowers.jpg'
-img = cv.imread(img_file)
+img_file = './Images/lena.png'
+img = cv.imread(img_file, cv.IMREAD_GRAYSCALE)
 nrows = img.shape[0]
 ncols = img.shape[1]
-nchls = img.shape[2]
 print("img: " + str(img.shape))
 
 # Step 1
@@ -21,28 +20,28 @@ P = nrows*2
 Q = ncols*2
 print("P,Q: " + str(P) + ", " + str(Q))
 
-# # Step 2
-# # form padded image
-# img_padded = dip.padding(img, dip.Pad.REFLECT_ACROSS_EDGE, mn=(nrows+1,ncols+1) ) # +1 because of the shared border with kernel
-# # crop padded image
-# img_cropped = img_padded[nrows:,ncols:]
-# print("img_cropped: " + str(img_cropped.shape))
-#
-# # Step 3
-# # multiply by (-1)^(x+y)
-# img_shifted = np.empty((P,Q,3), np.int8)
-# for ch in range(nchls):
-#     for y in range(P):
-#         for x in range(Q):
-#             img_shifted[y][x][ch] = img_cropped[y][x][ch] * (-1)**(x+y)
-#
-# # Step 4
-# # Compute DFT
+# Step 2
+# form padded image
+img_padded = dip.padding(img, dip.Pad.CLIP_ZERO, mn=(nrows+1,ncols+1) ) # +1 because of the shared border with kernel
+# crop padded image
+img_cropped = img_padded[nrows:,ncols:]
+print("img_cropped: " + str(img_cropped.shape))
+
+# Step 3
+# multiply by (-1)^(x+y)
+img_shifted = np.empty((P,Q), np.int8)
+for y in range(P):
+    for x in range(Q):
+        img_shifted[y][x] = img_cropped[y][x] * (-1)**(x+y)
+[hmag, hphase] = dip.freqz(img_shifted, normalized=True, centered=False)
+
+# Step 4
+# Compute DFT
 # Fimg = np.empty((P,Q,3), dtype=complex)
 # for ch in range(nchls):
 #     Fimg[:,:,ch] = dip.DFT2(img_shifted[:,:,ch]) # Fourier transform
 #     print("Fimg min,max: " + str(np.min(Fimg[:,:,ch])) + ", " + str(np.max(Fimg[:,:,ch])))
-#
+
 # # Step 5
 # # real-symmetric transfer funtion H(u,v) of size PxQ centerd at (P/2,Q,2)
 # sigma = 2 # try different values
@@ -86,9 +85,10 @@ print("P,Q: " + str(P) + ", " + str(Q))
 # print("gimg: " + str(g_padded.shape))
 
 
-
-cv.imshow('Padding',img_cropped)
-# cv.imshow('Shifted', dip.scaleImage(img_shifted, modo = 'custom', K = 255))
-cv.imshow('Gpadded',dip.scaleImage(g_padded, modo = 'custom', K = 255))
+cv.imshow('1 Original', img)
+cv.imshow('2 Padding',img_cropped)
+cv.imshow('3 Shifted', dip.scaleImage(img_shifted, crop=True))
+# cv.imshow('Gpadded',dip.scaleImage(g_padded, modo = 'custom', K = 255))
+cv.imshow('Mag Spectrum img_shifted', hmag)
 cv.waitKey()
 cv.destroyAllWindows()
