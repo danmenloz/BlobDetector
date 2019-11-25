@@ -8,7 +8,7 @@ import pyfftw # FFT library
 import time
 
 
-img_file = './Images/lena.png'
+img_file = './Images/einstein.jpg'
 img = cv.imread(img_file, cv.IMREAD_GRAYSCALE)
 nrows = img.shape[0]
 ncols = img.shape[1]
@@ -22,7 +22,7 @@ print("P,Q: " + str(P) + ", " + str(Q))
 
 # Step 2
 # form padded image
-img_padded = dip.padding(img, dip.Pad.CLIP_ZERO, mn=(nrows+1,ncols+1) ) # +1 because of the shared border with kernel
+img_padded = dip.padding(img, dip.Pad.REFLECT_ACROSS_EDGE, mn=(nrows+1,ncols+1) ) # +1 because of the shared border with kernel
 # crop padded image
 img_cropped = img_padded[nrows:,ncols:]
 print("img_cropped: " + str(img_cropped.shape))
@@ -44,12 +44,12 @@ print("Fimg min,max: " + str(np.min(Fimg)) + ", " + str(np.max(Fimg)))
 
 # Step 5
 # real-symmetric transfer funtion H(u,v) of size PxQ centerd at (P/2,Q,2)
-sigma = 10 # try different values
+sigma = 160 # try different values
 ksize = max(P, Q)
 # pdb.set_trace()
-# G = cv.getGaussianKernel(ksize,sigma)
-# H = np.multiply(G,np.transpose(G))
-H = np.ones((ksize,ksize))
+G = cv.getGaussianKernel(ksize,sigma)
+H = np.multiply(G,np.transpose(G))
+# H = np.ones((ksize,ksize))
 # pdb.set_trace()
 if Q>P:
     ha = int((Q-P)/2)
@@ -73,7 +73,7 @@ print("Gimg: " + str(Gimg.shape))
 # Filtered image through iDFT
 gimg = np.empty((P,Q), np.double)
 g_padded = np.empty((P,Q), np.double)
-gimg= (dip.IDFT2(Fimg)).real # changed Gimg for Fimg to test
+gimg= (dip.IDFT2(Gimg)).real # changed Gimg for Fimg to test
 print("gimg min,max: " + str(np.min(gimg)) + ", " + str(np.max(gimg)))
 [hmag1, hphase1] = dip.freqz(gimg, normalized=True, centered=False)
 
@@ -82,15 +82,21 @@ for y in range(P):
         g_padded[y][x] = gimg[y][x] * (-1)**(x+y)   #).astype(np.int8)
 print("g_padded min,max: " + str(np.min(g_padded)) + ", " + str(np.max(g_padded)))
 print("gimg: " + str(g_padded.shape))
+g_padded = dip.scaleImage(g_padded,modo='custom',K=255)
+
+# Step 8
+# Extract MxN region
+img_blurred = g_padded[0:nrows,0:ncols]
 
 
 cv.imshow('1 Original', img)
-cv.imshow('2 Padding',img_cropped)
-cv.imshow('3 Shifted', dip.scaleImage(img_shifted, crop=True))
-cv.imshow('4 Mag Spectrum img_shifted', hmag)
-cv.imshow('5 Gaussian Filter', dip.scaleImage(H,modo='custom',K=255))
-cv.imshow('6 Mag Spectrum H*F', hmag1)
-cv.imshow('7 g padded', dip.scaleImage(g_padded,modo='custom',K=255))
+# cv.imshow('2 Padding',img_cropped)
+# cv.imshow('3 Shifted', dip.scaleImage(img_shifted, crop=True))
+# cv.imshow('4 Mag Spectrum img_shifted', hmag)
+# cv.imshow('5 Gaussian Filter', dip.scaleImage(H,modo='custom',K=255))
+# cv.imshow('6 Mag Spectrum H*F', hmag1)
+# cv.imshow('7 g padded', g_padded)
+cv.imshow('8 Blurred image', img_blurred)
 print('Done!')
 cv.waitKey()
 cv.destroyAllWindows()
