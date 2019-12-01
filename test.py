@@ -4,24 +4,24 @@ import cv2 as cv
 import pdb
 import pyfftw # FFT library
 import time
+import math
 
 # README:
 # Instructions
 # Leave uncommented only the test section you want to run
 
 
-
-print("\nMAGNITUDE AND PHASE PLOTS\n")
-img_file = './Images/lena.png'
-img = cv.imread(img_file,cv.IMREAD_GRAYSCALE)
-# Call diptool function
-[hmag, hphase] = dip.freqz(img, normalized=True, centered=True)
-# plot responses
-cv.imshow('Original Image',img)
-cv.imshow('Magnitude Spectrum',hmag)
-cv.imshow('Phase Angle',hphase)
-cv.waitKey()
-cv.destroyAllWindows()
+# print("\nMAGNITUDE AND PHASE PLOTS\n")
+# img_file = './Images/lena.png'
+# img = cv.imread(img_file,cv.IMREAD_GRAYSCALE)
+# # Call diptool function
+# [hmag, hphase] = dip.freqz(img, normalized=True, centered=True)
+# # plot responses
+# cv.imshow('Original Image',img)
+# cv.imshow('Magnitude Spectrum',hmag)
+# cv.imshow('Phase Angle',hphase)
+# cv.waitKey()
+# cv.destroyAllWindows()
 
 
 # print("\n FORWARD AND INVERSE DFT DANIEL \n")
@@ -103,3 +103,24 @@ cv.destroyAllWindows()
 # start_time = time.time()
 # c = np.fft.fft(a)
 # print("    numpy time(s): " + str(time.time()-start_time))
+
+
+
+print("\nGAUSSIAN KERNEL GENERATION\n")
+ksize = 3
+sigma = 3
+# diptools implementation
+G1 = dip.GaussianKernel(ksize, sigma)
+print('G1 Max: ' + str(np.max(G1)))
+print('G1 Min: ' + str(np.min(G1)))
+print('G1: ' + str(G1))
+print(G1.dtype)
+# mathematical implementation
+G2 = np.empty((ksize, ksize),np.float64)
+for y in range(ksize):
+    for x in range(ksize):
+        G2[y][x] = (1/(2*math.pi*sigma**2)) * np.exp(-((x-1)**2+(y-1)**2)/(2*sigma**2)) #
+# pdb.set_trace()
+print('G2 Max: ' + str(np.max(G2)))
+print('G2 Min: ' + str(np.min(G2)))
+print('G2: ' + str(G2))

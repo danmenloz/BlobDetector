@@ -10,7 +10,7 @@
 from enum import Enum
 import numpy as np
 import cv2 as cv
-import pyfftw # FFT library
+# import pyfftw # FFT library
 import pdb
 import time
 import math
@@ -318,66 +318,66 @@ def padding(img, pad, mn=(1,1) ):
 
 
 
-# Fast Fourier Transform 2D
-# f - Grayscale input image
-def DFT2_PYFFTW(f):
-    # Initialize input and output vectors
-    a = pyfftw.empty_aligned(f.shape[1], dtype='complex128')
-    b = pyfftw.empty_aligned(f.shape[1], dtype='complex128')
-
-    fft_row = pyfftw.FFTW(a,b) # create FFTW object
-
-    # Create an empty array to store the FFT
-    Fxv = np.empty((f.shape[0],f.shape[1]), dtype='complex128')
-
-    # Perfom FFT on all rows of f
-    for y in range(f.shape[0]):
-        for x in range(f.shape[1]):
-            a[x] = f[y][x] # copy row in 'a' array
-        Fxv[y,:] = fft_row() # perfrom FFT and store it in array 'Fxv'
-
-    # Initialize input and output vectors
-    c = pyfftw.empty_aligned(f.shape[0], dtype='complex128')
-    d = pyfftw.empty_aligned(f.shape[0], dtype='complex128')
-
-    fft_col = pyfftw.FFTW(c,d) # create FFTW object
-
-    Fuv = np.empty((f.shape[0],f.shape[1]), dtype='complex128')
-
-    # Perfom FFT on all columns of Fuv
-    for x in range(Fuv.shape[1]):
-        for y in range(Fuv.shape[0]):
-            c[y] = Fxv[y][x] # copy row in 'a' array
-        Fuv[:,x] = fft_col() # perfrom FFT and store it in array 'Fuv'
-
-    return Fuv
-
-
-
-# Inverse Fast Fourier Transform 2D
-# F - input Grayscale image
-def IDFT2__PYFFTW(F):
-    # Create emtpy matrix to store the 2D IDFT
-    Fu = np.empty((F.shape[0],F.shape[1]), dtype='complex128')
-
-    # swap F
-    for y in range(F.shape[0]):
-        for x in range(F.shape[1]):
-            re = F[y][x].real
-            im = F[y][x].imag
-            Fu[y][x] = im + 1j*re
-
-    # compute 2D-DFT
-    Fx = DFT2(Fu)
-
-    # swap Fx
-    for y in range(Fx.shape[0]):
-        for x in range(Fx.shape[1]):
-            re = Fx[y][x].real
-            im = Fx[y][x].imag
-            Fx[y][x] = im + 1j*re
-
-    return Fx*(1/(F.shape[0]*F.shape[1]))
+# # Fast Fourier Transform 2D
+# # f - Grayscale input image
+# def DFT2_PYFFTW(f):
+#     # Initialize input and output vectors
+#     a = pyfftw.empty_aligned(f.shape[1], dtype='complex128')
+#     b = pyfftw.empty_aligned(f.shape[1], dtype='complex128')
+#
+#     fft_row = pyfftw.FFTW(a,b) # create FFTW object
+#
+#     # Create an empty array to store the FFT
+#     Fxv = np.empty((f.shape[0],f.shape[1]), dtype='complex128')
+#
+#     # Perfom FFT on all rows of f
+#     for y in range(f.shape[0]):
+#         for x in range(f.shape[1]):
+#             a[x] = f[y][x] # copy row in 'a' array
+#         Fxv[y,:] = fft_row() # perfrom FFT and store it in array 'Fxv'
+#
+#     # Initialize input and output vectors
+#     c = pyfftw.empty_aligned(f.shape[0], dtype='complex128')
+#     d = pyfftw.empty_aligned(f.shape[0], dtype='complex128')
+#
+#     fft_col = pyfftw.FFTW(c,d) # create FFTW object
+#
+#     Fuv = np.empty((f.shape[0],f.shape[1]), dtype='complex128')
+#
+#     # Perfom FFT on all columns of Fuv
+#     for x in range(Fuv.shape[1]):
+#         for y in range(Fuv.shape[0]):
+#             c[y] = Fxv[y][x] # copy row in 'a' array
+#         Fuv[:,x] = fft_col() # perfrom FFT and store it in array 'Fuv'
+#
+#     return Fuv
+#
+#
+#
+# # Inverse Fast Fourier Transform 2D
+# # F - input Grayscale image
+# def IDFT2__PYFFTW(F):
+#     # Create emtpy matrix to store the 2D IDFT
+#     Fu = np.empty((F.shape[0],F.shape[1]), dtype='complex128')
+#
+#     # swap F
+#     for y in range(F.shape[0]):
+#         for x in range(F.shape[1]):
+#             re = F[y][x].real
+#             im = F[y][x].imag
+#             Fu[y][x] = im + 1j*re
+#
+#     # compute 2D-DFT
+#     Fx = DFT2(Fu)
+#
+#     # swap Fx
+#     for y in range(Fx.shape[0]):
+#         for x in range(Fx.shape[1]):
+#             re = Fx[y][x].real
+#             im = Fx[y][x].imag
+#             Fx[y][x] = im + 1j*re
+#
+#     return Fx*(1/(F.shape[0]*F.shape[1]))
 
 
 
@@ -575,6 +575,30 @@ def GaussianVector(MN, perc, dir = 'width'):
     print('   sigma: ' + str(sigma) + ' ksize: ' + str(ksize))
 
     return cv.getGaussianKernel(ksize,sigma)
+
+
+
+# Gaussian Kernel
+# ksize - size of the square kernel
+# sigma - spread kernel value
+def GaussianKernel(ksize,sigma):
+    if not ksize%2: # is ksize even?
+        raise TypeError("kernel size must be odd")
+        exit()
+
+    g = cv.getGaussianKernel(ksize,sigma)
+    G = np.multiply(g,np.transpose(g))
+
+    # normalize Kernel
+    # make the center value 1
+    # normaizing factor is the center value of the raw kernel
+    idx = int(ksize/2)
+    W = (1/G[idx][idx]) * G
+
+    # Multiply by factor in eq 11-67, pag 883
+    W = (1/(2*math.pi*sigma**2)) * W
+
+    return(W)
 
 
 # Frequency Response
