@@ -1,18 +1,18 @@
  # Project 04 Digital Imaging Processing
 # Authors:
-#   * Daniel Mendez (dmendez@ncsu.edu)
-#   * Jaqueline
-#   * Alieth
+#   * Daniel Mendez         (dmendez@ncsu.edu)
+#   * Alhiet Orbegoso       (aoorbego@ncsu.edu)
+#   * Jacqueline Almache     (jalmach@ncsu.edu)
 # Version: python 3.7.4
 # Description: This file contains the core functions developed in all previous
 #   projects.
 
-from enum import Enum
 import numpy as np
 import cv2 as cv
-import pdb
-import time
-import math
+from enum import Enum
+
+# Constants
+SQRT2 = 2**(1/2)
 
  # Padding type
 class Pad(Enum):
@@ -153,7 +153,286 @@ def conv2(f,w,pad):
     return img_resized # this is a float-value matrix, not suitable for display, use scaleImage after it
 
 
+
+# Fast Fourier Transform 2D
+# f - Grayscale input image
+def dft2(f):
+    f = np.array(f)
+    # FFT in Rows
+    row_f = np.fft.fft(f)
+    # FFT in Columns
+    row_f = np.transpose(row_f)
+    col_f = np.fft.fft(row_f)
+    dft_2 = np.transpose(col_f)
+    return dft_2
+
+
+
+# Inverse Fast Fourier Transform 2D
+# F - input Grayscale image
+def idft2(f):
+    f = np.array(f)
+    # Calculating input matrix size
+    size_x = f.shape[0]
+    size_y = f.shape[1]
+    # Conjugate input matrix
+    conj_f = np.conj(f)
+    # Calculating inverse fft
+    idft_2 = 1/(size_x*size_y)*dft2(conj_f)
+    # return idft_2.real
+    return idft_2
+
+
+
+# Conv2 using fft implementation
+# conv2 implemented in frequency domain
+# image - grayscale image
+# kernel - gaussian symmetric kernel or other symmetric kernel
+def fftconv2(img, kernel):
+    # Kernel padding
+    sz = (img.shape[0] - kernel.shape[0], img.shape[1] - kernel.shape[1])  # total amount of padding
+    y1,y2,x1,x2 = ((sz[0]+1)//2, sz[0]//2, (sz[1]+1)//2, sz[1]//2) # padding on each side
+    kernel = padding(kernel, Pad.CLIP_ZERO, mn=(y1+1,x1+1)) # pad the kernel
+
+    # resize kernel to fit img size
+    if y1>y2 :
+        kernel = kernel[0:img.shape[0],:]
+    if x1>x2 :
+        kernel = kernel[:,0:img.shape[1]]
+
+    kernel = np.fft.fftshift(kernel) # shift center to origin (top left corner)
+
+    filtered = np.real(idft2(dft2(img) * dft2(kernel))) # conv2 in freq domain
+
+    return filtered # convolved image
+
+
+
+# Nearest Neighbor Interpolation
+# A - np.array image
+# new_size - list [height,width]
+def nnInterpolate(A, new_size):
+    old_size = A.shape
+    row_ratio, col_ratio = np.array(new_size)/np.array(old_size)
+
+    # row wise interpolation
+    row_idx = (np.ceil(range(1, 1 + int(old_size[0]*row_ratio))/row_ratio) - 1).astype(int)
+
+    # column wise interpolation
+    col_idx = (np.ceil(range(1, 1 + int(old_size[1]*col_ratio))/col_ratio) - 1).astype(int)
+
+    final_matrix = A[:, col_idx][row_idx, :] #modified
+
+    return final_matrix
+
+
+
+# Upsample image
+# img - np image arrays
+# new_size - size [height, width] of the output image
+# scale - downscale or upscale as a power of 2: 2,4,6...
+def upSample(img, new_size, scale):
+    up_img = np.empty((new_size[0],new_size[1], img.shape[2]),img.dtype) # create temporal image
+
+    # Upsample image
+    for c in range(img.shape[2]): # channel
+        up_img[:,:,c] = nnInterpolate(img[:,:,c],new_size)
+
+    # Smooth image
+    # g_vec = gaussianVector2(scale)
+    g_vec = gaussianVector((up_img.shape[0],up_img.shape[1]), 2)
+    fltrd_part =  conv2(up_img, g_vec,  Pad.REFLECT_ACROSS_EDGE )
+    fltrd_img =  conv2(fltrd_part, g_vec.transpose(),  Pad.REFLECT_ACROSS_EDGE )
+
+    return fltrd_img.astype(img.dtype)  # convert to np.uint image
+
+
+
+# Downsample image
+# img - np image array
+# new_size - size [height, width] of the output image
+# scale - downscale or upscale as a power of 2: 2,4,6...
+def downSample(img, new_size, scale):
+    down_img = np.empty((new_size[0],new_size[1], img.shape[2]),img.dtype) # create temporal image
+
+    # Smooth image
+    g_vec = gaussianVector((img.shape[0],img.shape[1]), 2)
+    fltrd_part =  conv2(img, g_vec,  Pad.REFLECT_ACROSS_EDGE )
+    fltrd_img =  conv2(fltrd_part, g_vec.transpose(),  Pad.REFLECT_ACROSS_EDGE )
+
+    fltrd_img.astype(img.dtype)  # convert to np.uint image TODO: fix line
+
+    # Downsample image
+    for c in range(img.shape[2]): # channel
+        down_img[:,:,c] = nnInterpolate(fltrd_img[:,:,c],new_size)
+
+    return down_img
+
+
+
+# Gaussian Vector for filtering
+# MN - image size  M rows, N columns
+# perc - image percentage wrt dir 0-100
+# dir - direction to get the percentage
+def gaussianVector(MN, perc, dir = 'width'):
+    # arguments checks
+    if dir != 'height' or dir != 'width':
+        dir = 'width' # defualt direction
+
+    if perc < 0:
+        perc = 0
+    elif perc > 100:
+        perc = 100
+
+    if len(MN)<2:
+        raise TypeError("Argument 'mn' in gaussianVector must have 2 elements")
+        exit()
+    M, N = MN # separate values
+
+    # determine kernel size
+    if dir == 'width':
+        ksize = int(N*perc/100)
+    else: # dir = height
+        ksize = int(M*perc/100)
+
+    # ensure odd ksize
+    if not ksize%2: # is ksize even?
+        ksize += 1 # make it odd
+
+    # smallest possible kernel
+    if ksize < 3:
+        ksize = 3
+
+    # determine sigma value
+    sigma = 2*ksize/6 # heristics for sigma value
+
+    # smallest possible sigma
+    if sigma < 1:
+        sigma = 1
+    print('   sigma: ' + str(sigma) + ' ksize: ' + str(ksize))
+
+    return cv.getGaussianKernel(ksize,sigma)
+
+
+
+# Gaussian Kernel for filtering
+# ksize - size of the square kernel
+# sigma - spread kernel value
+def gaussianKernel(ksize,sigma):
+    # if not ksize%2: # is ksize even?
+    #     raise TypeError("kernel size must be odd")
+    #     exit()
+    g = cv.getGaussianKernel(ksize,sigma)
+    G = np.multiply(g,np.transpose(g))
+    return(G)
+
+
+
+# Difference of Gaussians
+# img - initial image to be blurred (grayscale)
+# k - subdivision between blurred images
+# sigma - initial standard deviation
+# scales - num of DoG returned
+def DoG(img, k, sigma, scales):
+    img_n = np.array(img/255).astype(float) # normalize image
+    # Image smoothing
+    list_blur = []
+    for i in range(0,scales+1):
+        sigma_n = sigma*(k**i) # sigma value for this layer
+        ksize = int(2*np.ceil(3*sigma_n)+1) # change kernel size
+        kernel = gaussianKernel(ksize,sigma_n) # generate Gaussian kernel
+        blur = fftconv2(img_n,kernel) # blurr image
+        list_blur.append(blur) # add image to list
+    # Difference of Gaussian
+    list_DoG = []
+    for i in range(0,scales):
+        imgf_up = list_blur[i+1] # upper blurred image
+        imgf_down = list_blur[i] # lower blurred image
+        list_DoG.append(abs(imgf_up-imgf_down)) # compute DoG
+    img_scale = np.stack(list_DoG[0:scales]) # Converts list in 3d matrix
+    return img_scale
+
+
+
+# Move Array
+# arr - input Array
+# pos - Direction
+def moveArray(arr, pos):
+    if pos == "UP":
+        arr_out = np.roll(arr,1,axis=1) # UP
+        arr_out[:,0,:] = 0
+    elif pos == "DOWN":
+        arr_out = np.roll(arr,-1,axis=1) # DOWN
+        arr_out[:,arr.shape[1]-1,:] = 0
+    elif pos == "LEFT":
+        arr_out = np.roll(arr,1,axis=2) # LEFT
+        arr_out[:,:,0] = 0
+    elif pos == "RIGHT":
+        arr_out = np.roll(arr,-1,axis=2) # RIGHT
+        arr_out[:,:,arr.shape[2]-1] = 0
+    else:
+        arr_out = arr # NO MOVE
+    return arr_out
+
+
+
+# Compute Lapacian Blobs using non-max supression
+# img_scale - DoG sapace
+# S_limit - Value limit for keypoint values
+# sigma - standard deviation value
+def lapacianBlob(img_scale, S_limit, sigma):
+    img_scale_1 = moveArray(img_scale,"UP")
+    img_scale_0 = moveArray(img_scale_1,"LEFT")
+    img_scale_2 = moveArray(img_scale_1,"RIGHT")
+    img_scale_7 = moveArray(img_scale,"DOWN")
+    img_scale_6 = moveArray(img_scale_7,"LEFT")
+    img_scale_8 = moveArray(img_scale_7,"RIGHT")
+    img_scale_3 = moveArray(img_scale,"LEFT")
+    img_scale_5 = moveArray(img_scale,"RIGHT")
+
+    img_scale_T = np.concatenate((img_scale,img_scale_0,img_scale_1,img_scale_2,img_scale_3,
+                         img_scale_5,img_scale_6,img_scale_7,img_scale_8)) # Region for NMS evaluation
+
+    img_scale_s = np.argmax(img_scale_T,axis=0) # Scale position of maximum value
+    int_kpoint = np.logical_and((1<=img_scale_s),(img_scale_s<(img_scale.shape[0]-1))) # Verifies if max value inside Region
+    scale_max = np.max(img_scale_T,axis=0) # Scale maximum values matrix
+
+    ms = img_scale_s*int_kpoint # Scale Value
+    val_kpoint = scale_max*int_kpoint # Scale maximum values matrix inside region, otherwise scale=0
+    xy_kpoint = int_kpoint*(val_kpoint>=S_limit) # Value limitation for keypoint values
+    r_kpoint = (sigma*(SQRT2**ms))*SQRT2 # Circle Radius
+    c_kpoint = np.where(xy_kpoint==1) # Saving pixel position
+    return xy_kpoint,c_kpoint,r_kpoint
+
+
+# Draw Circles on an image
+# img - image to display
+# K - radius factor
+# r_limit - radius limit
+# xy_kpoint - keypoints position
+# c_kpoint - keypoints center
+# r_kpoint - kepoints radius
+def drawCircles(img, K, r_limit, xy_kpoint, c_kpoint, r_kpoint):
+    intxy_kp = (xy_kpoint>0) # integer keypoints positions
+    intnum_kp = np.sum(intxy_kp!=0) # Number of all keypoints
+    img_out = img.copy() # copy input image
+    c_int = np.array(c_kpoint).astype(int) # circle center
+    r_int = K*np.array(r_kpoint).astype(int) # circle radius
+    # draw circle in image
+    for d2 in range(0,img.shape[1]):
+        for d1 in range(0,img.shape[0]):
+            if (intxy_kp[d1,d2]):
+                r_int[r_int>r_limit] = r_limit
+                cv.circle(img_out, tuple([d2,d1]), r_int[d1,d2],(0,255,0), 1)
+    return intnum_kp, img_out
+
+
+
 # Scale Image for display
+# img - input image
+# modo - 'auto' uses the max(img) as limit, 'custom' uses K parameter as limit
+# K - maximum intensity when usidin modo 'custom'
+# crop - crop negative values to zero
 def scaleImage(img, modo = 'auto', K = 255, crop=False):
     # Check image channels
     if len(img.shape)>2:
@@ -199,8 +478,8 @@ def scaleImage(img, modo = 'auto', K = 255, crop=False):
     return img_scld
 
 
-# Scaled image with spanned the intensities in the range [0,K]
-# scaleImageChannel(g,K,data_type)
+
+# Scaled image with spanned intensities in the range [0,K]
 # g         - 1D image
 # K         - maximum value
 # data_type - np data type for the result
@@ -228,14 +507,13 @@ def scaleImageChannel(g,K,data_type):
 
 
 
-
 # Padding function
 # padding(img, pad, mn=(1,1) )
 # img - Image
 # pad - enumeration Pad
 # mn - tuple indicating the dimesion of the kernel
 # xy - origin of the kernel, default (0,0)
-# Note: img is meant to be bigger than the kernel
+# Note: img is meant to be bigger than the kernel size mn
 def padding(img, pad, mn=(1,1) ):
     # Check kernel size
     if len(mn)==2:
@@ -316,247 +594,6 @@ def padding(img, pad, mn=(1,1) ):
 
 
 
-# Fast Fourier Transform 2D
-# f - Grayscale input image
-def dft2(f):
-    f = np.array(f)
-    # FFT in Rows
-    row_f = np.fft.fft(f)
-    # FFT in Columns
-    row_f = np.transpose(row_f)
-    col_f = np.fft.fft(row_f)
-    dft_2 = np.transpose(col_f)
-    return dft_2
-
-
-
-
-# Inverse Fast Fourier Transform 2D
-# F - input Grayscale image
-def idft2(f):
-    f = np.array(f)
-    # Calculating input matrix size
-    size_x = f.shape[0]
-    size_y = f.shape[1]
-    # Conjugate input matrix
-    conj_f = np.conj(f)
-    # Calculating inverse fft
-    idft_2 = 1/(size_x*size_y)*dft2(conj_f)
-    # return idft_2.real
-    return idft_2
-
-
-# fftconv2
-# conv2 implemented in frequency domain
-# image - grayscale image
-# kernel - gaussian symmetric kernel or other symmetric kernel
-def fftconv2(img, kernel):
-    # Kernel padding
-    sz = (img.shape[0] - kernel.shape[0], img.shape[1] - kernel.shape[1])  # total amount of padding
-    y1,y2,x1,x2 = ((sz[0]+1)//2, sz[0]//2, (sz[1]+1)//2, sz[1]//2) # padding on each side
-    kernel = padding(kernel, Pad.CLIP_ZERO, mn=(y1+1,x1+1)) # developed padding function
-
-    # resize kernel to fit img size
-    if y1>y2 :
-        kernel = kernel[0:img.shape[0],:]
-    if x1>x2 :
-        kernel = kernel[:,0:img.shape[1]]
-
-    kernel = np.fft.fftshift(kernel) # shift center to origin (top left corner)
-
-    filtered = np.real(idft2(dft2(img) * dft2(kernel))) # conv2 in freq domain
-
-    return filtered # convolved image
-
-
-
-# Pyramid blending Function
-# Arguments
-# input_image - input image gray or RGB
-# num_layers - number of layers of the pyramid
-# Output
-# gPyr - Gaussian Pyramid
-# lPyr - Lapalacian Pyramid
-# pyramid - select pyramids to compute: both, gaussian, laplacian
-def ComputePyr(input_image, num_layers, pyramid='both'):
-
-    img_height = input_image.shape[0]
-    img_width = input_image.shape[1]
-    [gPyr, lPyr] = [None,None]
-
-    # num_layers must be positive
-    if num_layers < 1:
-        raise TypeError("Argument 'num_layers' must be a positive integer")
-        exit()
-
-    # check if num_layers is feasable
-    # num of layers is inclusive, i.e. counting the original image
-    h,w = [img_height, img_width]
-    for i in range(1,num_layers-1):
-        h,w = [int(h/2), int(w/2)]
-        if h==1 or w==1:
-            num_layers = i+1
-            print('Warning: Maximum number of layers is: '+str(num_layers))
-            break # exit for loop
-
-    # Gaussian pyramid alwas has to be computed
-    # generate Gaussian pyramid
-    print("  Gaussian layer 1")
-    gImg = input_image.copy()
-    gPyr = [gImg] # first  element
-    for i in range(num_layers-1):
-        # gImg = cv.pyrDown(gImg)
-        scale = (i+1)**2
-        gImg = downSample(gImg, [int(gImg.shape[0]/2),int(gImg.shape[1]/2)], scale)
-        print("  Gaussian layer " + str(i+2))
-        gPyr.append(gImg)
-
-    if pyramid=='both' or pyramid=='laplacian': # pyramid=='gaussian':
-        #generate Laplacian Pyramid
-        print("  Lapacian layer " + str(num_layers))
-        lPyr = [gPyr[-1]] # assign first element as the last element of gauss_pyramid
-        for i in range(num_layers-1, 0, -1): # for loop i reverse count
-            scale = (i)**2
-            gExt = upSample(gPyr[i], [gPyr[i-1].shape[0],gPyr[i-1].shape[1]], scale)
-            print("  Lapacian layer " + str(i))
-            lvl = cv.subtract(gPyr[i-1], gExt) # compute laplacian pyramid level
-            lPyr.append(lvl)
-
-    gPyr.reverse()
-    return [gPyr, lPyr] # return list
-
-
-
-# Nearest Neighbor Interpolation
-# A - np.array image
-# new_size - list [height,width]
-def nn_interpolate(A, new_size):
-    old_size = A.shape
-    row_ratio, col_ratio = np.array(new_size)/np.array(old_size)
-
-    # row wise interpolation
-    row_idx = (np.ceil(range(1, 1 + int(old_size[0]*row_ratio))/row_ratio) - 1).astype(int)
-
-    # column wise interpolation
-    col_idx = (np.ceil(range(1, 1 + int(old_size[1]*col_ratio))/col_ratio) - 1).astype(int)
-
-    final_matrix = A[:, col_idx][row_idx, :] #modified
-
-    return final_matrix
-
-
-
-# Upsample
-# img - np image array
-# new_size - size [height, width] of the output image
-# scale - downscale or upscale as a power of 2: 2,4,6...
-def upSample(img, new_size, scale):
-    up_img = np.empty((new_size[0],new_size[1], img.shape[2]),img.dtype) # create temporal image
-
-    # Upsample image
-    for c in range(img.shape[2]): # channel
-        up_img[:,:,c] = nn_interpolate(img[:,:,c],new_size)
-
-    # Smooth image
-    # g_vec = GaussianVector2(scale)
-    g_vec = GaussianVector((up_img.shape[0],up_img.shape[1]), 2)
-    fltrd_part =  conv2(up_img, g_vec,  Pad.REFLECT_ACROSS_EDGE )
-    fltrd_img =  conv2(fltrd_part, g_vec.transpose(),  Pad.REFLECT_ACROSS_EDGE )
-
-    return fltrd_img.astype(img.dtype)  # convert to np.uint image
-
-
-
-# Downsample
-# img - np image array
-# new_size - size [height, width] of the output image
-# scale - downscale or upscale as a power of 2: 2,4,6...
-def downSample(img, new_size, scale):
-    down_img = np.empty((new_size[0],new_size[1], img.shape[2]),img.dtype) # create temporal image
-
-    # Smooth image
-    g_vec = GaussianVector((img.shape[0],img.shape[1]), 2)
-    fltrd_part =  conv2(img, g_vec,  Pad.REFLECT_ACROSS_EDGE )
-    fltrd_img =  conv2(fltrd_part, g_vec.transpose(),  Pad.REFLECT_ACROSS_EDGE )
-
-    fltrd_img.astype(img.dtype)  # convert to np.uint image TODO: fix line
-
-    # Downsample image
-    for c in range(img.shape[2]): # channel
-        down_img[:,:,c] = nn_interpolate(fltrd_img[:,:,c],new_size)
-
-    return down_img
-
-
-
-# Gaussian Vector
-# MN - image size  M rows, N columns
-# perc - image percentage wrt dir 0-100
-# dir - direction to get the percentage
-def GaussianVector(MN, perc, dir = 'width'):
-    # arguments checks
-    if dir != 'height' or dir != 'width':
-        dir = 'width' # defualt direction
-
-    if perc < 0:
-        perc = 0
-    elif perc > 100:
-        perc = 100
-
-    if len(MN)<2:
-        raise TypeError("Argument 'mn' in GaussianVector must have 2 elements")
-        exit()
-    M, N = MN # separate values
-
-    # determine kernel size
-    if dir == 'width':
-        ksize = int(N*perc/100)
-    else: # dir = height
-        ksize = int(M*perc/100)
-
-    # ensure odd ksize
-    if not ksize%2: # is ksize even?
-        ksize += 1 # make it odd
-
-    # smallest possible kernel
-    if ksize < 3:
-        ksize = 3
-
-    # determine sigma value
-    sigma = 2*ksize/6 # heristics for sigma value
-
-    # smallest possible sigma
-    if sigma < 1:
-        sigma = 1
-    print('   sigma: ' + str(sigma) + ' ksize: ' + str(ksize))
-
-    return cv.getGaussianKernel(ksize,sigma)
-
-
-
-# Gaussian Kernel
-# ksize - size of the square kernel
-# sigma - spread kernel value
-def GaussianKernel(ksize,sigma):
-    if not ksize%2: # is ksize even?
-        raise TypeError("kernel size must be odd")
-        exit()
-
-    g = cv.getGaussianKernel(ksize,sigma)
-    G = np.multiply(g,np.transpose(g))
-
-    # normalize Kernel
-    # make the center value 1
-    # normaizing factor is the center value of the raw kernel
-    # idx = int(ksize/2)
-    # W = (1/G[idx][idx]) * G
-
-    # # Multiply by factor in eq 11-67, pag 883
-    # W = (1/(2*math.pi*sigma**2)) * W
-
-    return(G)
-
-
 # Frequency Response
 # Images of the Magnitude and Phase response ready to show with cv.imshow
 # f - image (1 cahnnel only)
@@ -580,142 +617,6 @@ def freqz(f, normalized=True, centered=True):
     return [magnitude_spectrum, phase_angle]
 
 
-# DoG Neighbors
-
-def DoGNeighbors( DoG, xy):
-    # Retreive point coordinates
-    x = xy[0]
-    y = xy[1]
-
-    N = [] # list to store the neighbors
-
-    # upper/lower neighbor indexes
-    iul = [ [y-1,x-1], [y-1,x], [y-1,x+1], \
-            [y,x-1],   [y,x],   [y,x+1],  \
-           [y+1,x-1], [y+1,x], [y+1,x+1] ]
-
-    # local neighbor indexes
-    il = [ [y-1,x-1], [y-1,x], [y-1,x+1], \
-            [y,x-1],            [y,x+1],  \
-           [y+1,x-1], [y+1,x], [y+1,x+1] ]
-
-    # Check indexes in valid range
-    valid_idxs = []
-    for idx in iul:
-        # Discard negative indexes
-        if idx[0]>0 and idx[1]>0: # idx[0] is y coordinate and idx[1] is the x coordinate
-            # Discard outrange indexes
-            if idx[0]<DoG[1].shape[0] and idx[1]<DoG[1].shape[1]:
-                valid_idxs.append(idx)
-    # overwrite indexes list
-    iul = valid_idxs
-
-
-    # Check indexes in valid range
-    valid_idxs = []
-    for idx in il:
-        # Discard negative indexes
-        if idx[0]>0 and idx[1]>0: # idx[0] is y coordinate and idx[1] is the x coordinate
-            # Discard outrange indexes
-            if idx[0]<DoG[1].shape[0] and idx[1]<DoG[1].shape[1]:
-                valid_idxs.append(idx)
-    # overwrite indexes list
-    il = valid_idxs
-
-    # Retreive valid lower neighbors
-    for idx in iul:
-        D = DoG[0] # lower layer
-        yi = idx[0]
-        xi = idx[1]
-        N.append(D[yi][xi]) # failed here :( IndexError: index 440 is out of bounds for axis 0 with size 440
-
-    # Retreive valid local neighbors
-    for idx in il:
-        D = DoG[1] # local layer
-        yi = idx[0]
-        xi = idx[1]
-        N.append(D[yi][xi])
-
-    # Retreive valid upper neighbors
-    for idx in iul:
-        D = DoG[2] # upper layer
-        yi = idx[0]
-        xi = idx[1]
-        N.append(D[yi][xi])
-
-    # print('N: ' + str(N))
-    # print('x,y: ' + str(xy))
-    return N
-
-
-
-# pyramidBlending Function
-def pyramidBlending():
-    # define number of layers
-    layers = 3
-
-    print("PYRAMID BLENDING\n")
-
-    # Align GUI
-    # alg.launch()
-    # Mask GUI
-    # can.launch()
-    # Give some time to finish saving file
-    time.sleep(1)
-
-    # default file names
-    source = 'foreground.jpg'
-    target = 'background.jpg'
-    mask = 'mask.jpg'
-
-    #  Source and Target
-    S = cv.imread(source)
-    T = cv.imread(target)
-    M = cv.imread(mask)
-
-    # Start time counter
-    start_time = time.time()
-
-    print('Computing S pyramids...')
-    gpS, lpS = ComputePyr(S, layers)
-    print('Computing T pyramids...')
-    gpT, lpT = ComputePyr(T, layers)
-    print('Computing M pyramids...')
-    gpM, lpM = ComputePyr(M, layers, pyramid='gaussian')
-
-    # Lapacian pyramid for composite
-    lpC = []
-    for ls,lt,g  in zip(lpS,lpT,gpM):
-        lpC_i = np.empty(g.shape,g.dtype) # create temporal image
-        for c in range(g.shape[2]): # channel
-            gs = (g[:,:,c]/255).astype(np.double) # normalized mask
-            # Iterate through pixels
-            for y in range(g.shape[0]): #y coordinate
-                for x in range(g.shape[1]): # x coordinate
-                    # Laplacian pyramid for composite formula
-                    # pdb.set_trace()
-                    lpC_i[y][x][c] = gs[y][x]*ls[y][x][c] + (1-gs[y][x])*lt[y][x][c]
-                    # ensure range TODO
-        lpC.append(lpC_i) # add element to pyramid
-        # pdb.set_trace()
-
-    # Recontruct image from Laplacian for composite pyramid
-    blend_img = lpC[0] #.astype(np.uint8)
-    for i in range(1,layers):
-        print("Blending layer " + str(i) + ' ...')
-        scale = i**2
-        blend_img = upSample(blend_img, [lpC[i].shape[0],lpC[i].shape[1]], scale )
-        blend_img = cv.add(blend_img, lpC[i]) # add up :)
-
-    # Display and save result
-    cv.imshow('Blending',blend_img)
-    print('Done!' + str(time.time()-start_time) + 'sec')
-    cv.waitKey()
-    cv.imwrite('./blending.png',blend_img)
-    cv.destroyAllWindows()
-
-
-
 # main function
 def main():
     # Print module information
@@ -724,18 +625,27 @@ def main():
                                 diptools.py
     Functions in this module:
     - conv2(f,w,pad)
-    - scaleImageChannel(g,K,data_type)
-    - padding(img, pad, mn=(1,1))
-    - DFT2(f)
-    - IDFT2(F)
-    - ComputePyr(input_image, num_layers, pyramid='both')
-    - nn_interpolate(A, new_size)
+    - dft2(f)
+    - idft2(f)
+    - fftconv2(img, kernel)
+    - nnInterpolate(A, new_size)
     - upSample(img, new_size, scale)
     - downSample(img, new_size, scale)
-    - GaussianVector(MN, perc, dir = 'width')
-    - pyramidBlending()
+    - gaussianVector(MN, perc, dir = 'width')
+    - gaussianKernel(ksize,sigma)
+    - DoG(img, k, sigma, scales)
+    - moveArray(arr, pos)
+    - lapacianBlob(img_scale, S_limit, sigma)
+    - drawCircles(img, K, r_limit, xy_kpoint, c_kpoint, r_kpoint)
+    - scaleImage(img, modo = 'auto', K = 255, crop=False)
+    - scaleImageChannel(g,K,data_type)
+    - padding(img, pad, mn=(1,1))
+    - freqz(f, normalized=True, centered=True)
 
-    Enumerations in this module:
+
+
+    Enumerations  and Constants in this module:
+    - SQRT2 = 2**(1/2)
     - Pad(Enum)
         CLIP_ZERO
         WRAP_AROUND
