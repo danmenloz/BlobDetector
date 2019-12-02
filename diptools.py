@@ -10,7 +10,6 @@
 from enum import Enum
 import numpy as np
 import cv2 as cv
-# import pyfftw # FFT library
 import pdb
 import time
 import math
@@ -154,10 +153,8 @@ def conv2(f,w,pad):
     return img_resized # this is a float-value matrix, not suitable for display, use scaleImage after it
 
 
-
-
 # Scale Image for display
-def scaleImage(img, modo = 'auto', K = 255, crop=False,):
+def scaleImage(img, modo = 'auto', K = 255, crop=False):
     # Check image channels
     if len(img.shape)>2:
         # It is a color image
@@ -238,6 +235,7 @@ def scaleImageChannel(g,K,data_type):
 # pad - enumeration Pad
 # mn - tuple indicating the dimesion of the kernel
 # xy - origin of the kernel, default (0,0)
+# Note: img is meant to be bigger than the kernel
 def padding(img, pad, mn=(1,1) ):
     # Check kernel size
     if len(mn)==2:
@@ -281,6 +279,7 @@ def padding(img, pad, mn=(1,1) ):
     elif pad == Pad.WRAP_AROUND:
         for x in range(new_width): # x coordinate
             if x<(n-1):
+                import pdb; pdb.set_trace()
                 img_padded[m-1:m-1+img_height,x:x+1] = img[0:img_height,N-n+1+x:N-n+1+(x+1)]
             if x>(n-1+img_width-1):
                 img_padded[m-1:m-1+img_height,x:x+1] = img[0:img_height,x-(n-1+img_width):x+1-(n-1+img_width)]
@@ -317,74 +316,9 @@ def padding(img, pad, mn=(1,1) ):
 
 
 
-
-# # Fast Fourier Transform 2D
-# # f - Grayscale input image
-# def DFT2_PYFFTW(f):
-#     # Initialize input and output vectors
-#     a = pyfftw.empty_aligned(f.shape[1], dtype='complex128')
-#     b = pyfftw.empty_aligned(f.shape[1], dtype='complex128')
-#
-#     fft_row = pyfftw.FFTW(a,b) # create FFTW object
-#
-#     # Create an empty array to store the FFT
-#     Fxv = np.empty((f.shape[0],f.shape[1]), dtype='complex128')
-#
-#     # Perfom FFT on all rows of f
-#     for y in range(f.shape[0]):
-#         for x in range(f.shape[1]):
-#             a[x] = f[y][x] # copy row in 'a' array
-#         Fxv[y,:] = fft_row() # perfrom FFT and store it in array 'Fxv'
-#
-#     # Initialize input and output vectors
-#     c = pyfftw.empty_aligned(f.shape[0], dtype='complex128')
-#     d = pyfftw.empty_aligned(f.shape[0], dtype='complex128')
-#
-#     fft_col = pyfftw.FFTW(c,d) # create FFTW object
-#
-#     Fuv = np.empty((f.shape[0],f.shape[1]), dtype='complex128')
-#
-#     # Perfom FFT on all columns of Fuv
-#     for x in range(Fuv.shape[1]):
-#         for y in range(Fuv.shape[0]):
-#             c[y] = Fxv[y][x] # copy row in 'a' array
-#         Fuv[:,x] = fft_col() # perfrom FFT and store it in array 'Fuv'
-#
-#     return Fuv
-#
-#
-#
-# # Inverse Fast Fourier Transform 2D
-# # F - input Grayscale image
-# def IDFT2__PYFFTW(F):
-#     # Create emtpy matrix to store the 2D IDFT
-#     Fu = np.empty((F.shape[0],F.shape[1]), dtype='complex128')
-#
-#     # swap F
-#     for y in range(F.shape[0]):
-#         for x in range(F.shape[1]):
-#             re = F[y][x].real
-#             im = F[y][x].imag
-#             Fu[y][x] = im + 1j*re
-#
-#     # compute 2D-DFT
-#     Fx = DFT2(Fu)
-#
-#     # swap Fx
-#     for y in range(Fx.shape[0]):
-#         for x in range(Fx.shape[1]):
-#             re = Fx[y][x].real
-#             im = Fx[y][x].imag
-#             Fx[y][x] = im + 1j*re
-#
-#     return Fx*(1/(F.shape[0]*F.shape[1]))
-
-
-
-
 # Fast Fourier Transform 2D
 # f - Grayscale input image
-def DFT2(f):
+def dft2(f):
     f = np.array(f)
     # FFT in Rows
     row_f = np.fft.fft(f)
@@ -399,7 +333,7 @@ def DFT2(f):
 
 # Inverse Fast Fourier Transform 2D
 # F - input Grayscale image
-def IDFT2(f):
+def idft2(f):
     f = np.array(f)
     # Calculating input matrix size
     size_x = f.shape[0]
@@ -407,10 +341,32 @@ def IDFT2(f):
     # Conjugate input matrix
     conj_f = np.conj(f)
     # Calculating inverse fft
-    idft_2 = 1/(size_x*size_y)*DFT2(conj_f)
+    idft_2 = 1/(size_x*size_y)*dft2(conj_f)
     # return idft_2.real
     return idft_2
 
+
+# fftconv2
+# conv2 implemented in frequency domain
+# image - grayscale image
+# kernel - gaussian symmetric kernel or other symmetric kernel
+def fftconv2(img, kernel):
+    # Kernel padding
+    sz = (img.shape[0] - kernel.shape[0], img.shape[1] - kernel.shape[1])  # total amount of padding
+    y1,y2,x1,x2 = ((sz[0]+1)//2, sz[0]//2, (sz[1]+1)//2, sz[1]//2) # padding on each side
+    kernel = padding(kernel, Pad.CLIP_ZERO, mn=(y1+1,x1+1)) # developed padding function
+
+    # resize kernel to fit img size
+    if y1>y2 :
+        kernel = kernel[0:img.shape[0],:]
+    if x1>x2 :
+        kernel = kernel[:,0:img.shape[1]]
+
+    kernel = np.fft.fftshift(kernel) # shift center to origin (top left corner)
+
+    filtered = np.real(idft2(dft2(img) * dft2(kernel))) # conv2 in freq domain
+
+    return filtered # convolved image
 
 
 
@@ -523,7 +479,7 @@ def downSample(img, new_size, scale):
     fltrd_part =  conv2(img, g_vec,  Pad.REFLECT_ACROSS_EDGE )
     fltrd_img =  conv2(fltrd_part, g_vec.transpose(),  Pad.REFLECT_ACROSS_EDGE )
 
-    fltrd_img.astype(img.dtype)  # convert to np.uint image
+    fltrd_img.astype(img.dtype)  # convert to np.uint image TODO: fix line
 
     # Downsample image
     for c in range(img.shape[2]): # channel
@@ -592,13 +548,13 @@ def GaussianKernel(ksize,sigma):
     # normalize Kernel
     # make the center value 1
     # normaizing factor is the center value of the raw kernel
-    idx = int(ksize/2)
-    W = (1/G[idx][idx]) * G
+    # idx = int(ksize/2)
+    # W = (1/G[idx][idx]) * G
 
-    # Multiply by factor in eq 11-67, pag 883
-    W = (1/(2*math.pi*sigma**2)) * W
+    # # Multiply by factor in eq 11-67, pag 883
+    # W = (1/(2*math.pi*sigma**2)) * W
 
-    return(W)
+    return(G)
 
 
 # Frequency Response
@@ -623,6 +579,73 @@ def freqz(f, normalized=True, centered=True):
     phase_angle = scaleImage(phase_angle,modo='custom',K=255)
     return [magnitude_spectrum, phase_angle]
 
+
+# DoG Neighbors
+
+def DoGNeighbors( DoG, xy):
+    # Retreive point coordinates
+    x = xy[0]
+    y = xy[1]
+
+    N = [] # list to store the neighbors
+
+    # upper/lower neighbor indexes
+    iul = [ [y-1,x-1], [y-1,x], [y-1,x+1], \
+            [y,x-1],   [y,x],   [y,x+1],  \
+           [y+1,x-1], [y+1,x], [y+1,x+1] ]
+
+    # local neighbor indexes
+    il = [ [y-1,x-1], [y-1,x], [y-1,x+1], \
+            [y,x-1],            [y,x+1],  \
+           [y+1,x-1], [y+1,x], [y+1,x+1] ]
+
+    # Check indexes in valid range
+    valid_idxs = []
+    for idx in iul:
+        # Discard negative indexes
+        if idx[0]>0 and idx[1]>0: # idx[0] is y coordinate and idx[1] is the x coordinate
+            # Discard outrange indexes
+            if idx[0]<DoG[1].shape[0] and idx[1]<DoG[1].shape[1]:
+                valid_idxs.append(idx)
+    # overwrite indexes list
+    iul = valid_idxs
+
+
+    # Check indexes in valid range
+    valid_idxs = []
+    for idx in il:
+        # Discard negative indexes
+        if idx[0]>0 and idx[1]>0: # idx[0] is y coordinate and idx[1] is the x coordinate
+            # Discard outrange indexes
+            if idx[0]<DoG[1].shape[0] and idx[1]<DoG[1].shape[1]:
+                valid_idxs.append(idx)
+    # overwrite indexes list
+    il = valid_idxs
+
+    # Retreive valid lower neighbors
+    for idx in iul:
+        D = DoG[0] # lower layer
+        yi = idx[0]
+        xi = idx[1]
+        N.append(D[yi][xi]) # failed here :( IndexError: index 440 is out of bounds for axis 0 with size 440
+
+    # Retreive valid local neighbors
+    for idx in il:
+        D = DoG[1] # local layer
+        yi = idx[0]
+        xi = idx[1]
+        N.append(D[yi][xi])
+
+    # Retreive valid upper neighbors
+    for idx in iul:
+        D = DoG[2] # upper layer
+        yi = idx[0]
+        xi = idx[1]
+        N.append(D[yi][xi])
+
+    # print('N: ' + str(N))
+    # print('x,y: ' + str(xy))
+    return N
 
 
 

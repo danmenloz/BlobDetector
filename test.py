@@ -106,21 +106,69 @@ import math
 
 
 
-print("\nGAUSSIAN KERNEL GENERATION\n")
-ksize = 3
-sigma = 3
-# diptools implementation
-G1 = dip.GaussianKernel(ksize, sigma)
-print('G1 Max: ' + str(np.max(G1)))
-print('G1 Min: ' + str(np.min(G1)))
-print('G1: ' + str(G1))
-print(G1.dtype)
-# mathematical implementation
-G2 = np.empty((ksize, ksize),np.float64)
-for y in range(ksize):
-    for x in range(ksize):
-        G2[y][x] = (1/(2*math.pi*sigma**2)) * np.exp(-((x-1)**2+(y-1)**2)/(2*sigma**2)) #
-# pdb.set_trace()
-print('G2 Max: ' + str(np.max(G2)))
-print('G2 Min: ' + str(np.min(G2)))
-print('G2: ' + str(G2))
+# print("\nGAUSSIAN KERNEL GENERATION\n")
+# ksize = 3
+# sigma = 3
+# # diptools implementation
+# G1 = dip.GaussianKernel(ksize, sigma)
+# print('G1 Max: ' + str(np.max(G1)))
+# print('G1 Min: ' + str(np.min(G1)))
+# print('G1: ' + str(G1))
+# print(G1.dtype)
+# # mathematical implementation
+# G2 = np.empty((ksize, ksize),np.float64)
+# for y in range(ksize):
+#     for x in range(ksize):
+#         G2[y][x] = (1/(2*math.pi*sigma**2)) * np.exp(-((x-1)**2+(y-1)**2)/(2*sigma**2)) #
+# # pdb.set_trace()
+# print('G2 Max: ' + str(np.max(G2)))
+# print('G2 Min: ' + str(np.min(G2)))
+# print('G2: ' + str(G2))
+
+
+
+
+# print("\nIMAGE BLURR BY CONVOLUTION\n")
+# img_file = './Images/lena.png'
+# img = cv.imread(img_file,cv.IMREAD_GRAYSCALE)
+#
+# # Blurr image using GuassianVector function
+# g_vec = dip.GaussianVector((img.shape[0],img.shape[1]), 2)
+# fltrd_part =  dip.conv2(img, g_vec,  dip.Pad.REFLECT_ACROSS_EDGE )
+# fltrd_img1 =  dip.conv2(fltrd_part, g_vec.transpose(),  dip.Pad.REFLECT_ACROSS_EDGE )
+#
+# fltrd_img1 = fltrd_img1.astype(img.dtype)  # convert to np.uint image
+#
+# print('Max1: ' + str(np.max(fltrd_img1)))
+# print('Min1: ' + str(np.min(fltrd_img1)))
+#
+# # Blurr image using GaussianKernel function
+# s = 2 # octave subdivision
+# ksize = 5
+# sigma = 1.6
+# k = 2**(1/s) # sigma factor
+# G = dip.GaussianKernel(ksize, (k**4)*sigma)
+# L = dip.conv2(img, G,  dip.Pad.REFLECT_ACROSS_EDGE)
+# L = L.astype(img.dtype)
+# print(img.dtype)
+# print('Max2: ' + str(np.max(L)))
+# print('Min2: ' + str(np.min(L)))
+#
+#
+# cv.imshow('filtered', fltrd_img1)
+# cv.imshow('original', img)
+# cv.imshow('L', L)
+# print('Done!')
+# cv.waitKey()
+# cv.destroyAllWindows()
+
+
+x = 5
+y = 5
+# local neighbor indexes
+il = [ [y-1,x-1], [y-1,x], [y-1,x+1], \
+        [y,x-1],            [y,x+1],  \
+       [y+1,x-1], [y+1,x], [y+1,x+1] ]
+
+
+print(il)

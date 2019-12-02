@@ -34,7 +34,7 @@ for y in range(P):
     for x in range(Q):
         img_shifted[y][x] = img_cropped[y][x] * (-1)**(x+y)
 print("img_shifted min,max: " + str(np.min(img_shifted)) + ", " + str(np.max(img_shifted)))
-[hmag, hphase] = dip.freqz(img_shifted, normalized=True, centered=False)
+# [hmag, hphase] = dip.freqz(img_shifted, normalized=True, centered=False)
 
 # Step 4
 # Compute DFT
