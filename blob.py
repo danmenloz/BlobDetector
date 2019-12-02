@@ -1,6 +1,6 @@
 import cv2
 import time
-import diptools as dip
+import distools as dip
 
 # Read image
 img = cv2.imread('./Images/butterfly.jpg')

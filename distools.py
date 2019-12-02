@@ -1,4 +1,4 @@
- # Project 04 Digital Imaging Processing
+ # ECE 558 Project 04 Digital Imaging Systems
 # Authors:
 #   * Daniel Mendez         (dmendez@ncsu.edu)
 #   * Alhiet Orbegoso       (aoorbego@ncsu.edu)
